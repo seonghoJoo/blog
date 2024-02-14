@@ -2,6 +2,36 @@
 
 ## Labels and Selectors
 
+We have deployed a number of PODs. They are labelled with `tier`, `env` and `bu`. How many PODs exist in the `dev` environment (`env`)?
+
+```yaml
+kubectl get pods --selector env=dev
+```
+
+경험에 따르면, CPU sort 하는 것도 시험에 나온다고 하였다. 
+
+```yaml
+kubectl top po -A --sort-by=cpu
+```
+
+How many PODs are in the `finance` business unit (`bu`)?
+
+```yaml
+kubectl get pods --selector bu=finance
+```
+
+How many objects are in the `prod` environment including PODs, ReplicaSets and any other objects?
+
+```yaml
+kubectl get all --selector env=prod
+```
+
+Identify the POD which is part of the `prod` environment, the `finance` BU and of `frontend` tier?
+
+```yaml
+kubectl get all --selector env=prod,bu=finance,tier=frontend
+```
+
 replicaset-definition.yaml
 
 ```yaml
