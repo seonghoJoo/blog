@@ -88,3 +88,56 @@ spec:
 	  image: data-processor
 	nodeSelector: Large
 ```
+## Node Affinitiy
+
+### Node Affinity Type
+
+```java
+requiredDuringSchedulingIngnoredDuringExecution - Type1 : 강제성이 있음.
+preferredDuringSchedulingIngnoredDuringExecution - Type2 : 어쩔 수 없으면 함.
+```
+
+Apply a label `color=blue` to node `node01`
+
+```bash
+kubectl label nodes node01 color=blue
+```
+
+Create a new deployment named `blue` with the `nginx` image and 3 replicas.
+
+```bash
+kubectl create deployment blue --image=nginx
+kubectl scale deployment/blue --replicas=3
+```
+
+Which nodes `can` the pods for the `blue` deployment be placed on?
+
+Make sure to check taints on both nodes!
+
+```bash
+kubectl describe node controlplane | grep Taints
+kubectl describe node node1 | grep Tains
+
+check Taint both!
+```
+
+Create a new deployment named `red` with the `nginx` image and `2` replicas, and ensure it gets placed on the `controlplane` node only.
+
+Use the label key - `node-role.kubernetes.io/control-plane` - which is already set on the `controlplane` node.
+
+```bash
+kubectl create deployment red --image=nginx --replicas=2 --dry-run=client -o yaml  
+
+kubectl create deployment red --image=nginx --replicas=2 --dry-run=client -o yaml > red.yaml 
+ 
+
+affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+```
