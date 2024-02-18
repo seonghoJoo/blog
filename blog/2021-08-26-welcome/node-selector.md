@@ -40,22 +40,22 @@ kind : ReplicaSet
 metadata:
   name: simple-webapp
   labels:
-		app: app1
-		function: Front-end
+    app: app1
+    function: Front-end
 spec:
-	replicas: 3
+  replicas: 3
   selector:
-		matchLabels:
-			app: App1
+	matchLabels:
+	  app: App1
 	template:
-		metadata:
-			labels:
-				app: App1
-				function: Front-end
+	  metadata:
+	    labels:
+		  app: App1
+		  function: Front-end
 		spec:
-			containers:
-				- name : simple-webapp
-					image: simple-webapp
+		  containers:
+		    - name : simple-webapp
+			  image: simple-webapp
 ```
 
 service-definition.yaml
@@ -67,11 +67,11 @@ metadata:
   name: my-service
 spec:
   selector:
-		app: App1
+    app: App1
 	ports:
-		- protocol:TCP
-			port : 80
-			targetPort: 9376
+	- protocol:TCP
+	port : 80
+	targetPort: 9376
 ```
 
 ## Node Selector
