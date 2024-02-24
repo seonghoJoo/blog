@@ -141,3 +141,124 @@ affinity:
             values:
             - ssd
 ```
+
+## Resource Requirements and Limit
+
+개념) Kube-Scheduler가 노드의  Mem / CPU를 보고 pod를 Node에 할당 
+
+### 할당 단위
+
+CPU : 1m(최소 단위 이 밑으로 내려갈 수  없음.) 1 (CPU Core를 의미)
+
+The `elephant` pod runs a process that consumes 15Mi of memory. Increase the limit of the `elephant` pod to 20Mi.
+
+Delete and recreate the pod if required. Do not modify anything other than the required fields.
+
+```bash
+kubectl create pod elephant --image=polinux/stress  --dry-run=client -o yaml > elephant.yaml
+ 
+kubectl replace -f elephant.yaml --force
+```
+
+## Daemon Sets
+
+모든 노드에 각각 존재함. 모니터링에서 사용됨.
+
+kube-scheduler의 영향을 받지 않음
+
+```bash
+ kubectl get daemonsets --all-namespaces
+```
+
+Which namespace is the `kube-proxy` Daemonset created in?
+
+What is the image used by the POD deployed by the `kube-flannel-ds` **DaemonSet**?
+
+```bash
+kubectl describe daemonset kube-flannel-ds --namespace=kube-flannel
+```
+
+Deploy a **DaemonSet** for `FluentD` Logging.
+
+Name: elasticsearch
+
+Namespace: kube-system
+
+Image: registry.k8s.io/fluentd-elasticsearch:1.20
+kubectl create Daemonset elasticsearch --namespace=kube-system --image=registry.k8s.io/fluentd-elasticsearch:1.20 -o yaml > elasticsearch.yaml
+
+```bash
+kubectl create Daemonset은 없음
+
+kubectl create deployment elasticsearch --namespace=kube-system --image=registry.k8s.io/fluentd-elasticsearch:1.20 --dry-run=client -o yaml
+
+kubectl create deployment elasticsearch --namespace=kube-system --image=registry.k8s.io/fluentd-elasticsearch:1.20 --dry-run=client -o yaml > fluentD.yaml
+
+```
+
+## Static Pod
+
+각 node 안 kubelet에서 생성을 함.
+
+kube-scheduler의 영향을 받지 않음
+
+pod.yaml은 `etc/kubernetes/manifests` 에 존재하며 이를 가져온다.
+
+## Multiple Scheduler
+
+scheduler 만들기
+
+```yaml
+apiVersion: kubescheduler.config.k8s.io/v1
+kind: KubeSchedulerConfiguration
+profiles:
+  - schedulerName: my-scheduler
+leaderElection:
+  leaderElect: false
+```
+
+Pod에 custom scheduler 적용하는 방법 
+
+```yaml
+apiVersion : v1
+kind : Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+	- image: nginx
+	  name: nginx
+	shcedulerName: my-custom-scheduler
+```
+
+### View Events
+
+```bash
+kubectl get evnets -o wide
+
+kubectl logs my-custom-scheulder --name-space=kube-system
+```
+
+What is the name of the POD that deploys the default kubernetes scheduler in this environment?
+
+```bash
+kubectl get pods --namespace=kube-system
+
+kubectl get pods -A
+```
+
+Deploy an additional scheduler to the cluster following the given specification.
+
+Use the manifest file provided at `/root/my-scheduler.yaml`. Use the same image as used by the default kubernetes scheduler.
+
+## Scheduling 4단계
+
+Scheduling Queue → Filtering → Scoring → Binding
+
+Scheduling Queue : PrioritySort
+
+Filtering : NodeResourcesFit, NodeName, NodeUnshcedulable
+
+Scoring : NodeResourcesFit, ImageLocality 
+
+Binding : DefaultBinder
