@@ -40,7 +40,7 @@ User → Kube-apiserver → Process 인데 Kube-apiserve에서 인증을 먼저 
 
 Public Lock = Publick Key 하는일: 암호화 *.crt, *pem server.crt, server.pem
 
-P rivate Key 하는일 복호화 *.key, *-key.pem server.key, server-key.pem
+Private Key 하는일 복호화 *.key, *-key.pem server.key, server-key.pem
 
 ```bash
 # 내 환경에서 로그인 하기
@@ -56,8 +56,6 @@ P rivate Key 하는일 복호화 *.key, *-key.pem server.key, server-key.pem
 cat ~/.ssh/authorized_keys
 
 ```
-
-![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/e2420219-92c6-460d-a6e0-5b36d02defa0/74145aa8-6316-4d68-bdd8-c8c53e407460/Untitled.png)
 
 ## TLS in K8s
 
@@ -186,3 +184,173 @@ Approve the CSR Request
 deny the agnet-smith
 
 `kubectl certificate deny agent-smith`
+
+## KubeConfig
+![KubeConfig는 3가지로 이루어져있다.](image-4.png)
+
+Kubeconfig는 3개로 이루어져 있다.
+
+1. Clusters
+2. Contexts
+3. Users
+
+우린 그동안 인증을 뒤에 붙여놓고  kube-apiserver에 명령을 내릴 수 있었다.
+
+```yaml
+kubectl get pods --server my-kube-cluster:443\
+--client-key admin.key
+--client-certificate admin.crt
+--certificate-authority ca.crt
+```
+
+하지만 kubeconfig를 사용하면 뒤에 덕지덕지 붙은 옵션값들을 안 넣을 수 있다.
+
+`$Home/.kube/config` 에있는 KubeConfig 파일을 읽는다.
+
+kubeconfig로 다른 환경에 들어가고 싶을 때
+
+```yaml
+kubectl config view
+kubectl config use-context prod-user@production 
+kubectl config use-context context-name --kubeconfig /root/my-kube-config
+```
+
+## API Groups
+
+kube api server와 다름 `/api` `/apis`에 포커싱을 한다.
+
+`/version` : 쿠버네티스 버전을 살피기 위함
+
+`/metrics` `/healthz` 상태를 모니터링 하기 위함
+
+`/log` 로깅을 위함
+
+`/api` : core group
+
+`/apis` : API Group
+
+`/apps`
+
+`/v1` : Resources 
+
+`/deployment`
+
+`list` `get` `create` `delete`
+
+`/replicasets`
+
+`/statefulsets`
+
+`/networking.k8s.io`
+
+`/v1` : Resources 
+
+`/networkpolicies`
+
+`/authentication.k8s.io`
+
+`/storage.k8s.io`
+
+`/certificates.k8s.io`
+
+`/v1` : Resources 
+
+`/certificatesigningrequests`
+
+```bash
+curl http://localhost:6443 -k
+
+curl http://localhost:6443/apis -k | grep "name"
+
+```
+
+## Authorization - 허가
+
+create role 
+
+```yaml
+# kubectl get roles
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+	name: developer
+rules: #(룰은 3가지로 이루어져있음)
+- apiGroups: [""]
+	resources: ["pods"]
+	verbs: ["list", "get", "create", "update", "delete"]
+- apiGroups: [""]
+	resources: ["ConfigMap"]
+	verbs: ["create"]
+```
+
+Role binding
+
+```yaml
+# kubectl get rolebindings
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+	name: devuser-developer-binding
+subjects:
+	- kind: User
+		name: dev-user
+		apiGroup: rbac.authorization.k8s.io
+roleRef:
+	kind: Role
+	name: developer
+	apiGroup: rbac.authorization.k8s.io
+```
+
+### Check Access
+
+```bash
+kubectl auth can-i create deployments --as devuser --namespace test
+kubectl auth can-i delete nodes
+
+```
+
+### 권한을 이용해서 실행하기
+
+`dev-user` 에게 네임스페이스 `blue 에서 create deployment` 권한이 있고, `create deployment`를 실행해라
+
+```bash
+kubectl --as dev-user create deployment nginx
+```
+
+## Cluster Role and Role Binding
+
+Cluster Admin에서 `View Node` `delete Node` `delete Node` 의 권한을 줄 수 있다.
+
+```yaml
+get | watch | list  create | delete
+```
+
+## Service Account
+
+계정엔 두개가 존재한다. User Account와 Service Account. 이전 내용들은 모두 user account에 관한 내용이었다. 하지만 이제부턴 시스템이 사용하는 service account를 다뤄볼 것이다. 대표적으로 prometheus, jenkins가 사용하는 계정이 있다.
+
+만약 kube-apiserver를 통해 쿠버네티스 안의 pod등의 정보를 가져오는 service account 예시 또한 들 수 있다.
+
+```yaml
+# pod-definition.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+	name:
+spec:
+	containers:
+		- name: my-kubernetes-dashboard
+			image: my-kubernetes-dashboard
+	**serviceAccountName: dashboard-sa**
+```
+
+1. service account 계정 생성
+2. Secret에 token 저장 해당 토큰은 https rest call 할 때, —header Bearer token `{token}`  으로 인증된다.
+
+네임스페이스는 default가 기본이고 namespace 별로 다르게 생성할 수 잇다.
+
+```bash
+kubectl exec -it my-kubernetes-dashboard --ls /var/run/secrets/kubernetes.io/serviceaccount
+```
+
+service account의 권한은 kube-apiserver에 쿼리하는 정도의 제한된 권한만 가지고 있음.
