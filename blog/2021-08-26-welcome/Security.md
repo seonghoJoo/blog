@@ -354,3 +354,235 @@ kubectl exec -it my-kubernetes-dashboard --ls /var/run/secrets/kubernetes.io/ser
 ```
 
 service account의 권한은 kube-apiserver에 쿼리하는 정도의 제한된 권한만 가지고 있음.
+
+### 실습 문제
+
+The application needs a ServiceAccount with the Right permissions to be created to authenticate to Kubernetes. The `default` ServiceAccount has limited access. Create a new ServiceAccount named `dashboard-sa`.
+
+```bash
+# SA service account 위한 토큰 만들기
+kubectl create token dashboadr-sa
+```
+
+You shouldn't have to copy and paste the token each time. The Dashboard application is programmed to read token from the secret mount location. However currently, the `default` service account is mounted. Update the deployment to use the newly created ServiceAccount
+
+Edit the deployment to change ServiceAccount from `default` to `dashboard-sa`.
+
+서비스 토큰을 마운트 시키기
+
+```yaml
+apiVersion: deployment
+kind: Deployment
+metadata: ...
+spec:
+	serviceAccountName: dashboard-sa
+	containers: ...	
+```
+
+## Image Security
+
+```bash
+docker login private-registry.io
+
+docker run private-registry.io/apps/internal-app
+
+kubectl create secret docker-registry regcred \
+	--docker-server=private-registry.io \
+	--docker-username=registry-user \
+	--docker-password=regisry-password \
+	--docker-email=registry-user@org.com
+```
+
+```yaml
+# pod-definition.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+	name:
+spec:
+	containers:
+		- name: nginx
+			image: private-registry.io/apps/internal-app
+		imagePullSecrets:
+		- name: regcred
+```
+
+### 실습문제
+
+Create a secret object with the credentials required to access the registry.
+
+Name: `private-reg-cred`
+
+Username: `dock_user`
+
+Password: `dock_password`
+
+Server: `myprivateregistry.com:5000`
+
+Email: `dock_user@myprivateregistry.com`
+
+```yaml
+kubectl create secret docker-registry private-reg-cred --docker-server=myprivateregistry.com:5000 --docker-username=dock_user --docker-password=dock_password --docker-email=dock_user@myprivateregistry.com
+
+kubectl create secret docker-registry private-reg-cred --docker-username=dock_user --docker-password=dock_password --docker-server=myprivateregistry.com:5000 --docker-email=dock_user@myprivateregistry.com
+```
+
+### Docker Security
+
+컨테이너와 호스트가 같은 커널을 사용한다. 컨테이너는 리눅스에서 namespace에 의해 격리된다.
+
+host와 container는 namespace가 존재한다. 결국 다른 PID로 격리되도록 한다.
+
+만약 특정 컨테이너의 user가 root 사용자가 아니길 원한다면..?
+
+`docker run --user=1000 ubuntu sleep 1000`  
+
+```yaml
+# pod 레벨에서 보안
+apiVersion: v1
+kind: Pod
+
+spec:
+  securityContext:
+		runAsUser: 1000 # 1000번 사용자로 실행해라
+	containers:
+		image:
+--------------
+# container 레벨에서 보안
+apiVersion: v1
+kind: Pod
+
+spec:
+  securityContext:
+		runAsUser: 1000 # 1000번 사용자로 실행해라
+	containers:
+		- image:
+			securityContext:
+				runAsUser: 1000 # 1000번 사용자로 실행해라
+				capabilities:
+					add: ["MAC_ADMIN"]
+```
+
+## Network Policy
+
+Ingress(인입을 받는)와 Egress(밖으로 호출하는) 개념이 있다.
+
+수행 :`Allow Ingress Traffic From API Pod on port 3306`
+
+```yaml
+# MYSQL DB Ingress (웹 Backend로 부터 인입을 받아야하는)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+	name:
+spec: 
+	podSelector:
+		matchLabels:
+			role: db
+	policyTypes:
+	- Ingress
+	ingress:
+	- from:
+		- podSelector:
+				matchLabels:
+					name: api-pod
+		ports:
+		- protocol: TCP
+			port: 3306	
+```
+
+### prod namespace내에서 잘 통신하고 있었는데, 만약 다른 namespace의 api-pod들이 접근하려고 하는데 이를 막으려면?
+
+```yaml
+# MYSQL DB Ingress (웹 Backend로 부터 인입을 받아야하는)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+	name:
+spec: 
+	podSelector:
+		matchLabels:
+			role: db
+	policyTypes:
+	- Ingress
+	ingress:
+	- from:
+        # 특정 pod에게만 접근을 허용 # && 특정 Namespace에게만 접근을 허용
+		- podSelector:
+            matchLabels:
+					name: api-pod
+          namespaceSelector:
+            matchLabels:
+					name: prod
+		- ipBlock:
+				cidr: 192.168.5.10/32
+		ports:
+		- protocol: TCP
+			port: 3306	
+```
+![api-pod && prod](<network-policy-1.png>)
+
+### depth (-)를 다르게 하여 조건을 변경할 수 있다.
+
+```yaml
+# MYSQL DB Ingress (웹 Backend로 부터 인입을 받아야하는)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+	name:
+spec: 
+	podSelector:
+		matchLabels:
+			role: db
+	policyTypes:
+	- Ingress
+	ingress:
+	- from:
+        # 특정 pod에게만 접근을 허용 || 특정 Namespace에게만 접근을 허용
+		- podSelector:
+				matchLabels:
+					name: api-pod
+		- namespaceSelector:
+				matchLabels:
+					name: prod
+		- ipBlock:
+			cidr: 192.168.5.10/32
+		ports:
+		- protocol: TCP
+			port: 3306	
+```
+
+![api-pod || prod](<network-policy-2.png>)
+
+```yaml
+# MYSQL DB Ingress (웹 Backend로 부터 인입을 받아야하는)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+	name:
+spec: 
+	podSelector:
+		matchLabels:
+			role: db
+	policyTypes:
+	- Ingress
+	- Egress
+	ingress:
+	- from:
+        # 특정 pod에게만 접근을 허용 || 특정 Namespace에게만 접근을 허용
+		- podSelector:
+				matchLabels:
+					name: api-pod
+		ports:
+		- protocol: TCP
+			port: 3306	
+	egress:
+	- to: 
+		- ipBlock:
+				cidr: 192.168.5.10/32
+		ports:
+		- protocol: TCP
+			port: 80
+```
+
+![from api-pod to backend server](<network-policy-3.png>)
